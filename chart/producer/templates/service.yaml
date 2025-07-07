@@ -3,10 +3,9 @@ kind: Service
 metadata:
   name: producer
 spec:
-  type: {{ .Values.service.type | default "ClusterIP" }}
   selector:
     app: producer
   ports:
     - protocol: TCP
-      port: {{ .Values.service.port }}
+      port: 3000
       targetPort: {{ .Values.service.port }}
