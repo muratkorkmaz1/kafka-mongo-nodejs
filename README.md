@@ -1,102 +1,115 @@
+# Kafka-Mongo NodeJS Observability Pipeline
 
-# Kafka-Mongo NodeJS Monitoring with CI/CD
-
-This project demonstrates a complete Kafka-based data pipeline using a Node.js producer and consumer, MongoDB for storage, and Grafana/Prometheus for monitoring. Kubernetes deployments are managed with Helm and ArgoCD, while GitHub Actions handles CI/CD.
-
----
-
-## 📦 Components
-
-- **Kafka Producer** – Publishes messages to Kafka topic
-- **Kafka Consumer** – Reads messages and stores them in MongoDB
-- **MongoDB** – Stores logs
-- **Kafka + Zookeeper** – Messaging layer
-- **Prometheus + Grafana** – Monitoring
-- **ArgoCD** – GitOps-based Kubernetes deployment
-- **GitHub Actions** – CI/CD pipeline for Docker builds and deployments
+Bu proje, Kafka ile üretilen mesajların bir Node.js consumer aracılığıyla MongoDB'ye yazılmasını, CI/CD sürecinin GitHub Actions ile yönetilmesini ve sistemin ArgoCD + Prometheus + Grafana kullanılarak izlenmesini sağlar.
 
 ---
 
-## 🚀 Getting Started
+## 🔧 Proje Bileşenleri
 
-### 🔧 Prerequisites
-
-- Docker
-- Minikube
-- Helm
-- kubectl
-- ArgoCD CLI (optional)
+- **Producer:** HTTP üzerinden gelen mesajları Kafka'ya publish eder.
+- **Consumer:** Kafka'dan gelen mesajları dinler ve MongoDB'ye yazar.
+- **Kafka, MongoDB:** Docker üzerinde external olarak çalışır.
+- **Kubernetes:** Minikube üzerinde Helm + ArgoCD ile deployment yapılır.
+- **Monitoring:** Prometheus + Grafana + node-exporter ile metrik takibi.
+- **CI/CD:** GitHub Actions ile Docker image build/push + ArgoCD sync işlemleri.
 
 ---
 
-## 🧱 Project Structure
+## 🚀 Kurulum Adımları
 
-```
-.
-├── consumer/
-├── producer/
-├── docker/
-├── chart/
-│   ├── consumer/
-│   └── producer/
-├── argocd/
-│   ├── consumer.yaml
-│   └── producer.yaml
-├── .github/workflows/
-│   ├── consumer.yml
-│   └── producer.yml
-└── README.md
+### 1. Docker Servislerini Başlat
+
+```bash
+docker-compose up -d
 ```
 
----
-
-## ⚙️ Deployment
-
-### 1. Start Minikube
+### 2. Minikube Başlat
 
 ```bash
 minikube start
 ```
 
-### 2. Enable ArgoCD
+### 3. ArgoCD Kurulumu
 
 ```bash
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 ```
 
-### 3. Access ArgoCD UI
+### 4. ArgoCD UI Erişimi
 
 ```bash
 kubectl port-forward svc/argocd-server -n argocd 8080:443
 ```
 
-Access: [https://localhost:8080](https://localhost:8080)
+Tarayıcıda aç: [https://localhost:8080](https://localhost:8080)
 
-### 🔑 Get ArgoCD admin password:
+İlk şifre:
 
 ```bash
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 --decode
+kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath="{.data.password}" | base64 --decode
 ```
 
 ---
 
-### 4. Deploy with ArgoCD
+## 📦 Deployment
 
-```bash
-kubectl apply -f argocd/producer.yaml
-kubectl apply -f argocd/consumer.yaml
+### 1. Helm Chart Yapısı
+
+```text
+chart/
+├── consumer/
+├── producer/
+├── templates/
+└── values.yaml
+```
+
+### 2. Uygulamaları Deploy Etmek için ArgoCD App Tanımı
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: producer
+spec:
+  source:
+    repoURL: https://github.com/<username>/kafka-mongo-nodejs
+    path: chart/producer
+    targetRevision: HEAD
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
 ```
 
 ---
 
-## 🔍 Monitoring Setup
+## ✅ Test
 
-### 1. Install Prometheus & Grafana with Helm
+```bash
+curl -X POST http://localhost:3000/submit   -H "Content-Type: application/json"   -d '{"value": "hello kafka"}'
+```
+
+MongoDB üzerinde kontrol:
+
+```bash
+docker exec -it kafka-mongo-nodejs-mongodb-1 mongosh
+use kafka_logs
+db.logs.find().pretty()
+```
+
+---
+
+## 📊 Monitoring
+
+### 1. Prometheus ve Grafana Kurulumu
 
 ```bash
 kubectl create namespace monitoring
-
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add grafana https://grafana.github.io/helm-charts
 helm repo update
@@ -105,93 +118,73 @@ helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring
 helm install grafana grafana/grafana -n monitoring
 ```
 
----
-
-### 2. Get Grafana admin password
+### 2. Grafana Admin Şifresi Öğrenme
 
 ```bash
 kubectl get secret grafana-admin -n monitoring -o jsonpath="{.data.GF_SECURITY_ADMIN_PASSWORD}" | base64 --decode
 ```
 
-### 3. Expose Grafana (Option 1: NodePort)
+Kullanıcı: `admin`
+
+---
+
+### 3. Grafana UI Erişimi (Minikube Tunnel ile)
+
+#### a. Servis tipini LoadBalancer yap:
 
 ```bash
-kubectl patch svc grafana -n monitoring -p '{"spec": {"type": "NodePort", "ports": [{"port":3000,"targetPort":3000,"nodePort":32000}]}}'
+kubectl patch svc grafana -n monitoring -p '{"spec": {"type": "LoadBalancer"}}'
 ```
 
-Then access Grafana: [http://localhost:32000](http://localhost:32000)
-
-### 🔑 Default credentials
-
-- **Username:** `admin`
-- **Password:** `your_decoded_password`
-
----
-
-### 4. Add Prometheus Datasource in Grafana
-
-Use this URL in data source settings:
-
-```
-http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
-```
-
----
-
-## ✅ GitHub Actions – CI/CD
-
-### 1. Add GitHub Secrets
-
-In your GitHub repo, go to **Settings > Secrets and variables > Actions**, then add:
-
-- `DOCKER_USERNAME` – your Docker Hub username
-- `DOCKER_PASSWORD` – your Docker Hub password or PAT
-
-### 2. Commit and Push
+#### b. Minikube tunnel başlat:
 
 ```bash
-git add .
-git commit -m "CI/CD and Monitoring Setup"
-git push origin main
+minikube tunnel
 ```
 
-CI will automatically:
-
-- Build Docker images
-- Push them to Docker Hub
-- Trigger deployment with ArgoCD
-
----
-
-## 📮 Test Producer Endpoint
+#### c. IP ve port bilgilerini kontrol et:
 
 ```bash
-curl -X POST http://localhost:3000/submit \
-     -H "Content-Type: application/json" \
-     -d '{"value": "hello from curl"}'
+kubectl get svc -n monitoring grafana
+```
+
+#### d. Tarayıcıdan eriş:
+
+```text
+http://127.0.0.1:3000
 ```
 
 ---
 
-## 📊 Import Dashboards
+## 🔁 CI/CD Süreci
 
-In Grafana:
+GitHub Actions pipeline `.github/workflows/deploy.yml` dosyasıyla tetiklenir:
 
-- Go to **+ > Import**
-- Use a dashboard ID (e.g. `12778`)
-- Select Prometheus as data source
+- Docker image build + push (consumer & producer)
+- ArgoCD App sync işlemi
+- Tüm secrets GitHub üzerinden tanımlanır (`DOCKERHUB_USERNAME`, `DOCKERHUB_PASSWORD` vs.)
 
 ---
 
-## 🧼 Cleanup
+## 🔐 Kullanılan GitHub Secrets
 
-```bash
-minikube delete
+| Name               | Açıklama                         |
+|--------------------|----------------------------------|
+| `DOCKERHUB_USERNAME` | Docker Hub kullanıcı adı         |
+| `DOCKERHUB_PASSWORD` | Docker Hub erişim token'ı        |
+| `ARGOCD_SERVER`      | ArgoCD API endpoint              |
+| `ARGOCD_AUTH_TOKEN`  | ArgoCD erişim token'ı            |
+
+---
+
+## 🗺️ Topoloji
+
+```
+[user] → [producer: Node.js] → [Kafka (Docker)] → [consumer: Node.js] → [MongoDB (Docker)]
+                                                     ↘                         ↙
+                                                    [Prometheus + Grafana Monitoring]
 ```
 
 ---
 
-## 👨‍💻 Author
-
-**Murat Korkmaz**  
-GitHub: [muratkorkmaz1](https://github.com/muratkorkmaz1)
+Tüm sistem Minikube üzerinde Helm + ArgoCD ile yönetilir, dış servislerle (Kafka, Mongo) Docker üzerinden haberleşir.
