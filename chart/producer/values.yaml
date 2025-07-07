@@ -1,0 +1,13 @@
+image:
+  repository: muratkorkmaz24/kafka-producer
+  tag: latest
+  pullPolicy: IfNotPresent
+
+env:
+  KAFKA_BROKER: 172.18.0.4:9092
+  KAFKA_TOPIC: test-topic
+
+service:
+  port: 3000
+
+replicaCount: 1

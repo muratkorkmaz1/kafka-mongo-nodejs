@@ -1,0 +1,13 @@
+image:
+  repository: muratkorkmaz24/kafka-consumer
+  tag: latest
+  pullPolicy: IfNotPresent
+
+env:
+  KAFKA_BROKER: 172.18.0.4:9092
+  TOPIC_NAME: test-topic
+  MONGODB_URI: mongodb://172.18.0.5:27017
+  MONGODB_DB: kafka_logs
+  MONGODB_COLLECTION: logs
+
+replicaCount: 1
