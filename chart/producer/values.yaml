@@ -8,6 +8,7 @@ env:
   KAFKA_TOPIC: test-topic
 
 service:
+  type: NodePort  # ← Burayı ekliyoruz
   port: 3000
 
 replicaCount: 1
