@@ -1,0 +1,35 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set short SHA
+        id: vars
+        run: echo "SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_ENV
+
+      - name: Build and push producer
+        run: |
+          docker build -t muratkorkmaz24/kafka-producer:latest -t muratkorkmaz24/kafka-producer:${SHORT_SHA} -f docker/Dockerfile.producer .
+          docker push muratkorkmaz24/kafka-producer:latest
+          docker push muratkorkmaz24/kafka-producer:${SHORT_SHA}
+
+      - name: Build and push consumer
+        run: |
+          docker build -t muratkorkmaz24/kafka-consumer:latest -t muratkorkmaz24/kafka-consumer:${SHORT_SHA} -f docker/Dockerfile.consumer .
+          docker push muratkorkmaz24/kafka-consumer:latest
+          docker push muratkorkmaz24/kafka-consumer:${SHORT_SHA}
