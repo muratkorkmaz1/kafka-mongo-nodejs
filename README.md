@@ -1,3 +1,4 @@
+
 # Kafka-Mongo NodeJS Observability Pipeline
 
 Bu proje, Kafka ile üretilen mesajların bir Node.js consumer aracılığıyla MongoDB'ye yazılmasını, CI/CD sürecinin GitHub Actions ile yönetilmesini ve sistemin ArgoCD + Prometheus + Grafana kullanılarak izlenmesini sağlar.
@@ -29,14 +30,36 @@ docker-compose up -d
 minikube start
 ```
 
-### 3. ArgoCD Kurulumu
+### 3. External Kafka ve Mongo IP'lerini Öğren
+
+```bash
+docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' kafka-mongo-nodejs-kafka-1
+docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' kafka-mongo-nodejs-mongodb-1
+```
+
+> Bu IP’leri `producer/.env`, `consumer/.env` ve `values.yaml` dosyalarında uygun şekilde güncelleyin.
+
+---
+
+## 🎯 Helm Deploy
+
+```bash
+kubectl create namespace kafka-mongo
+
+helm upgrade --install producer ./chart/producer -n kafka-mongo -f chart/producer/values.yaml
+helm upgrade --install consumer ./chart/consumer -n kafka-mongo -f chart/consumer/values.yaml
+```
+
+---
+
+## 🚢 ArgoCD Kurulumu
 
 ```bash
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 ```
 
-### 4. ArgoCD UI Erişimi
+### ArgoCD UI Erişimi
 
 ```bash
 kubectl port-forward svc/argocd-server -n argocd 8080:443
@@ -52,43 +75,26 @@ kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath="{.data.pas
 
 ---
 
-## 📦 Deployment
+## 📦 ArgoCD ile Uygulama Deploy
 
-### 1. Helm Chart Yapısı
+`producer.yaml` ve `consumer.yaml` dosyalarıyla ArgoCD üzerinden otomatik senkronizasyon sağlanır.
 
-```text
-chart/
-├── consumer/
-├── producer/
-├── templates/
-└── values.yaml
-```
-
-### 2. Uygulamaları Deploy Etmek için ArgoCD App Tanımı
-
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: producer
-spec:
-  source:
-    repoURL: https://github.com/<username>/kafka-mongo-nodejs
-    path: chart/producer
-    targetRevision: HEAD
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: default
-  project: default
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+```bash
+kubectl apply -f producer.yaml -n argocd
+kubectl apply -f consumer.yaml -n argocd
 ```
 
 ---
 
 ## ✅ Test
+
+Producer pod'una port yönlendirme yap:
+
+```bash
+kubectl port-forward -n kafka-mongo service/producer 3000:3000
+```
+
+Ardından:
 
 ```bash
 curl -X POST http://localhost:3000/submit   -H "Content-Type: application/json"   -d '{"value": "hello kafka"}'
@@ -104,12 +110,13 @@ db.logs.find().pretty()
 
 ---
 
-## 📊 Monitoring
+## 📊 Monitoring (Prometheus + Grafana)
 
-### 1. Prometheus ve Grafana Kurulumu
+### 1. Kurulum
 
 ```bash
 kubectl create namespace monitoring
+
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add grafana https://grafana.github.io/helm-charts
 helm repo update
@@ -118,41 +125,23 @@ helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring
 helm install grafana grafana/grafana -n monitoring
 ```
 
-### 2. Grafana Admin Şifresi Öğrenme
+### 2. Grafana Admin Şifresi
 
 ```bash
-kubectl get secret grafana-admin -n monitoring -o jsonpath="{.data.GF_SECURITY_ADMIN_PASSWORD}" | base64 --decode
+kubectl get secret grafana -n monitoring -o jsonpath="{.data.admin-password}" | base64 --decode
 ```
 
 Kullanıcı: `admin`
 
 ---
 
-### 3. Grafana UI Erişimi (Minikube Tunnel ile)
-
-#### a. Servis tipini LoadBalancer yap:
+### 3. Grafana UI Erişimi
 
 ```bash
-kubectl patch svc grafana -n monitoring -p '{"spec": {"type": "LoadBalancer"}}'
+kubectl --namespace monitoring port-forward svc/grafana 3001:80
 ```
 
-#### b. Minikube tunnel başlat:
-
-```bash
-minikube tunnel
-```
-
-#### c. IP ve port bilgilerini kontrol et:
-
-```bash
-kubectl get svc -n monitoring grafana
-```
-
-#### d. Tarayıcıdan eriş:
-
-```text
-http://127.0.0.1:3000
-```
+Tarayıcıda aç: [http://localhost:3001](http://localhost:3001)
 
 ---
 
@@ -168,8 +157,8 @@ GitHub Actions pipeline `.github/workflows/deploy.yml` dosyasıyla tetiklenir:
 
 ## 🔐 Kullanılan GitHub Secrets
 
-| Name               | Açıklama                         |
-|--------------------|----------------------------------|
+| Name                 | Açıklama                         |
+|----------------------|----------------------------------|
 | `DOCKERHUB_USERNAME` | Docker Hub kullanıcı adı         |
 | `DOCKERHUB_PASSWORD` | Docker Hub erişim token'ı        |
 | `ARGOCD_SERVER`      | ArgoCD API endpoint              |
@@ -184,7 +173,5 @@ GitHub Actions pipeline `.github/workflows/deploy.yml` dosyasıyla tetiklenir:
                                                      ↘                         ↙
                                                     [Prometheus + Grafana Monitoring]
 ```
-
----
 
 Tüm sistem Minikube üzerinde Helm + ArgoCD ile yönetilir, dış servislerle (Kafka, Mongo) Docker üzerinden haberleşir.
