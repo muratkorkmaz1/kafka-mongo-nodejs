@@ -4,11 +4,11 @@ image:
   pullPolicy: IfNotPresent
 
 env:
-  KAFKA_BROKER: 192.168.1.37:9092
+  KAFKA_BROKER: 192.168.1.55:9092
   KAFKA_TOPIC: test-topic
 
 service:
-  type: NodePort  # ← Burayı ekliyoruz
+  type: ClusterIP
   port: 3000
 
 replicaCount: 1

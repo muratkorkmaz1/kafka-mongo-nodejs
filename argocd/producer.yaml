@@ -11,7 +11,7 @@ spec:
     path: chart/producer
   destination:
     server: https://kubernetes.default.svc
-    namespace: default
+    namespace: kafka-mongo
   syncPolicy:
     automated:
       prune: true

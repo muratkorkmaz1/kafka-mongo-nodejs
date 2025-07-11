@@ -4,9 +4,9 @@ image:
   pullPolicy: IfNotPresent
 
 env:
-  KAFKA_BROKER: 192.168.1.37:9092
+  KAFKA_BROKER: 192.168.1.55:9092
   TOPIC_NAME: test-topic
-  MONGODB_URI: mongodb://192.168.1.37:27017
+  MONGODB_URI: mongodb://192.168.1.55:27017
   MONGODB_DB: kafka_logs
   MONGODB_COLLECTION: logs
 
